@@ -1,0 +1,16 @@
+region: ap-southeast-1
+zone: ap-southeast-1a # zone that the master AMI will be configured in
+keypair:
+security_groups: ['SecurityGroup']
+instance_type: t2.micro
+LoadBalancer: ApplicationLoadBalancer
+# specify group_name on the command line with -e group_name=devX
+group_name: test
+instances_min: 2 # minimum number of instances in the auto scaling group
+instances_max: 4 # maximum number of instances in the auto scaling group
+iam_profile: "IAMInstanceProfile"
+volumes:
+  - device_name: /dev/sda1
+    device_type: gp2
+    volume_size: 8 # size of the root disk
+    delete_on_termination: true

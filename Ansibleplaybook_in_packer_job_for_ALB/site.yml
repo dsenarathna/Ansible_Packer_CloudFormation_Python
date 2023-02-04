@@ -1,0 +1,6 @@
+- hosts: all
+    connection: local
+    gather_facts: yes
+    roles:
+      - { role: create-launch-config, asg_name: "{{ group_name }}" }
+      - { role: auto-scaling, asg_name: "{{ group_name }}", instances_max: 1 }

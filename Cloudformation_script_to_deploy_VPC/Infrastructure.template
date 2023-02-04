@@ -1,0 +1,511 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: >
+  CloudFormation Template to create the following AWS services
+  1. VPC with two public and private subnets
+  2. Route tables for each subnet
+  3. Security Group to allow port 80 and 44
+  4. ELB/ALB
+  5. Private route53 hosted zone and CNAME entry for both ALB and ELB
+  6. S3 bucket
+  7. IAM Policy for assignment-3
+
+Parameters:
+  VPCCidrBlock:
+    Type: String
+    Default: 10.99.0.0/16
+    MinLength: '10'
+    MaxLength: '18'
+    AllowedPattern: '((\d{1,3})\.){3}\d{1,3}/\d{1,2}'
+
+  PublicCidrBlockA:
+    Type: String
+    Default: 10.99.1.0/24
+    MinLength: '10'
+    MaxLength: '18'
+    AllowedPattern: '((\d{1,3})\.){3}\d{1,3}/\d{1,2}'
+
+  PublicCidrBlockB:
+    Type: String
+    Default: 10.99.2.0/24
+    MinLength: '10'
+    MaxLength: '18'
+    AllowedPattern: '((\d{1,3})\.){3}\d{1,3}/\d{1,2}'
+
+  PrivateCidrBlockA:
+    Type: String
+    Default: 10.99.21.0/24
+    MinLength: '10'
+    MaxLength: '18'
+    AllowedPattern: '((\d{1,3})\.){3}\d{1,3}/\d{1,2}'
+
+  PrivateCidrBlockB:
+    Type: String
+    Default: 10.99.22.0/24
+    MinLength: '10'
+    MaxLength: '18'
+    AllowedPattern: '((\d{1,3})\.){3}\d{1,3}/\d{1,2}'
+
+  AllowHttpToPublicRuleNumber:
+    Type: Number
+    Default: '100'
+
+  AllowHttpsToPublicRuleNumber:
+    Type: Number
+    Default: '104'
+
+  S3BucketName:
+   Type: String
+   Default: astro-assignment-1-bucket
+
+  S3BucketAccessControl:
+    Type: String
+    Default: PublicRead
+
+  AvailabilityZone1:
+    Type: String
+    Default: ap-southeast-1a
+    AllowedValues:
+    - ap-southeast-1a
+    - ap-southeast-1b
+
+  AvailabilityZone2:
+    Type: String
+    Default: ap-southeast-1b
+    AllowedValues:
+    - ap-southeast-1a
+    - ap-southeast-1b
+
+Metadata:
+  TemplateAuthor: 'Sulabh Chaturvedi'
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+    -
+      Label:
+        default: Subnets
+      Parameters:
+        - PublicCidrBlockA
+        - PublicCidrBlockB
+        - PrivateCidrBlockA
+        - PrivateCidrBlockB
+    -
+      Label:
+        default: ACL Rule Numbers
+      Parameters:
+        - AllowHttpToPublicRuleNumber
+        - AllowHttpsToPublicRuleNumber
+    -
+      Label:
+        default: S3 Bucket
+      Parameters:
+        - S3BucketName
+        - S3S3BucketAccessControl
+    -
+      Label:
+        default: AvailabilityZone1
+      Parameters:
+        - a
+        - b
+        - c
+        - d
+        - e
+        - f
+    -
+      Label:
+        default: AvailabilityZone2
+      Parameters:
+        - a
+        - b
+        - c
+        - d
+        - e
+        - f
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VPCCidrBlock
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    DependsOn: InternetGateway
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Ref AvailabilityZone1
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicCidrBlockA
+      MapPublicIpOnLaunch: true
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Ref AvailabilityZone2
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicCidrBlockB
+      MapPublicIpOnLaunch: true
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Ref AvailabilityZone1
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateCidrBlockA
+      MapPublicIpOnLaunch: false
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Ref AvailabilityZone2
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateCidrBlockB
+      MapPublicIpOnLaunch: false
+
+  PublicRouteTable:
+    Type : AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGateway
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref PublicRouteTable
+
+  NatPublicIp:
+    Type: AWS::EC2::EIP
+    DependsOn: VPC
+    Properties:
+      Domain: vpc
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    DependsOn: NatPublicIp
+    Properties:
+      AllocationId: !GetAtt NatPublicIp.AllocationId
+      SubnetId: !Ref PublicSubnetA
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  NatRoute:
+    Type: AWS::EC2::Route
+    DependsOn: NatGateway
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  PrivateSubnetARouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      DependsOn: PrivateSubnetA
+      Properties:
+        RouteTableId: !Ref PrivateRouteTable
+        SubnetId: !Ref PrivateSubnetA
+
+  PrivateSubnetBRouteTableAssocition:
+     Type: AWS::EC2::SubnetRouteTableAssociation
+     DependsOn: PrivateSubnetB
+     Properties:
+        RouteTableId: !Ref PrivateRouteTable
+        SubnetId: !Ref PrivateSubnetB
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "Instance Security Group"
+      GroupDescription: "Instance Access - (Instance to Instance) tcp, tcp and tcp."
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: '443'
+        ToPort: '443'
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: '443'
+        ToPort: '443'
+        CidrIp: 0.0.0.0/0
+
+  PublicNetworkAcl:
+    Type: AWS::EC2::NetworkAcl
+    DependsOn: VPC
+    Properties:
+      VpcId: !Ref VPC
+
+  PublicAclAllowHttp:
+    Type: AWS::EC2::NetworkAclEntry
+    DependsOn: PublicNetworkAcl
+    Properties:
+      NetworkAclId: !Ref PublicNetworkAcl
+      RuleNumber: !Ref AllowHttpToPublicRuleNumber
+      Protocol: "6"
+      RuleAction: allow
+      Egress: 'false'
+      CidrBlock: 0.0.0.0/0
+      PortRange:
+        From: '80'
+        To: '80'
+
+  PublicAclAllowHttps:
+    Type: AWS::EC2::NetworkAclEntry
+    DependsOn: PublicNetworkAcl
+    Properties:
+      NetworkAclId: !Ref PublicNetworkAcl
+      RuleNumber: !Ref AllowHttpsToPublicRuleNumber
+      Protocol: "6"
+      RuleAction: allow
+      Egress: 'false'
+      CidrBlock: 0.0.0.0/0
+      PortRange:
+        From: '443'
+        To: '443'
+
+  PublicSubnetNetworkAclAssociationA:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    DependsOn:
+      - PublicSubnetA
+      - PublicNetworkAcl
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      NetworkAclId: !Ref PublicNetworkAcl
+
+  PublicSubnetNetworkAclAssociationB:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    DependsOn:
+      - PublicSubnetB
+      - PublicNetworkAcl
+    Properties:
+      SubnetId: !Ref PublicSubnetB
+      NetworkAclId: !Ref PublicNetworkAcl
+
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn: PublicSubnetA
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnetA
+
+  PublicSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn: PublicSubnetB
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnetB
+
+  PrivateNetworkAcl:
+    Type: AWS::EC2::NetworkAcl
+    DependsOn: VPC
+    Properties:
+      VpcId: !Ref VPC
+
+  PrivateSubnetASubnetNetworkAclAssociation:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    DependsOn:
+      - PrivateSubnetA
+      - PrivateNetworkAcl
+    Properties:
+      SubnetId: !Ref PrivateSubnetA
+      NetworkAclId: !Ref PrivateNetworkAcl
+
+  PrivateSubnetBSubnetNetworkAclAssociation:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    DependsOn:
+      - PrivateSubnetB
+      - PrivateNetworkAcl
+    Properties:
+      SubnetId: !Ref PrivateSubnetB
+      NetworkAclId: !Ref PrivateNetworkAcl
+
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ALBTargetGroup
+      LoadBalancerArn:
+          Ref: ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internet-facing
+      Subnets:
+      - Ref: PublicSubnetA
+      - Ref: PublicSubnetB
+      SecurityGroups:
+      - !Ref SecurityGroup
+
+  ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 60
+      UnhealthyThresholdCount: 10
+      HealthCheckPath: /
+      Name: MyTargetGroup
+      Port: 80
+      Protocol: HTTP
+      VpcId:
+        Ref: VPC
+
+  DNS:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      HostedZoneConfig:
+        Comment: My private hosted zone for example.com
+      Name: example.net.
+      VPCs:
+        -
+         VPCId: !Ref VPC
+         VPCRegion: ap-southeast-1
+
+  DNSRecordSet:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref DNS
+      Comment: Zone apex alias targeted to Application Load Balancer.
+      Name: www.example.net.
+      Type: CNAME
+      AliasTarget:
+        HostedZoneId: Z1LMS91P8CMLE5
+        DNSName: !GetAtt ApplicationLoadBalancer.DNSName
+
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Ref S3BucketName
+      VersioningConfiguration:
+        Status: Enabled
+      AccessControl: !Ref S3BucketAccessControl
+
+  IAMNewRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action:
+             - sts:AssumeRole
+      Path: "/"
+      Policies:
+        -
+          PolicyName: MyPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              -
+                Effect: Allow
+                Action:
+                - 'autoscaling:Describe*'
+                - 'cloudformation:Describe*'
+                - 'cloudformation:List*'
+                - 'autoscaling:*'
+                - 'ec2:Describe*'
+                - 'elasticloadbalancing:Describe*'
+                - 'route53:List*'
+                - 'route53:Get*'
+                - 's3:List*'
+                - 's3:Get*'
+                - 's3:PutObject'
+                - 'rds:Describe*'
+                - 'rds:List*'
+                - 'codedeploy:*'
+
+                Resource: '*'
+
+  IAMInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: "/"
+      Roles:
+        -
+         Ref: IAMNewRole
+
+Outputs:
+  VPC:
+    Description: Created VPC
+    Value: !Ref VPC
+  InternetGateway:
+    Description: Created InternetGateway
+    Value: !Ref InternetGateway
+  VPCGatewayAttachment:
+    Description: Gateway for Internet for this VPC
+    Value: !Ref VPCGatewayAttachment
+  PublicRouteTable:
+    Description: Public Route Table Created for VPC
+    Value: !Ref PublicRouteTable
+  PrivateRouteTable:
+    Description: Private Route Table Created for VPC
+    Value: !Ref PrivateRouteTable
+  PublicNetworkAcl:
+    Description: Public Network ACL Created for VPC
+    Value: !Ref PublicNetworkAcl
+  PrivateNetworkAcl:
+    Description: Private Netowrk ACL Created for VPC
+    Value: !Ref PrivateNetworkAcl
+  PublicSubnetA:
+    Description: Public Subnet A Created for VPC
+    Value: !Ref PublicSubnetA
+  PublicSubnetB:
+    Description: Public Subnet B Created for VPC
+    Value: !Ref PublicSubnetB
+  PrivateSubnetA:
+    Description: Private Subnet A Created for VPC
+    Value: !Ref PrivateSubnetA
+  PrivateSubnetB:
+    Description: Private Subnet B Created for VPC
+    Value: !Ref PrivateSubnetB
+  NatGateway:
+    Description: Nat Gateway
+    Value: !Ref NatGateway
+  SecurityGroup:
+    Description: Security Group to allow ports 80 and 443
+    Value: !Ref SecurityGroup
+  ApplicationLoadBalancer:
+    Description: Application Load Balancer
+    Value: !Ref ApplicationLoadBalancer
+  S3Bucket:
+    Description: S3 Bucket
+    Value: !Ref S3Bucket
+  Route53DNS:
+    Description: Hosted Zone
+    Value: !Ref DNS
+  DNSRecordSet:
+    Description: CNAME entry for ELB/ALB
+    Value: !Ref DNSRecordSet
+  IAMInstanceProfile:
+    Description: IAM Instance Profile
+    Value: !Ref IAMInstanceProfile
+  IAMRole:
+    Description: IAM Role
+    Value: !Ref IAMNewRole
